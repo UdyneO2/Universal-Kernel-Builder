@@ -1,0 +1,153 @@
+name: "Build kernels"
+on:
+  workflow_dispatch:
+    inputs:
+      BR:
+        description: 'Kernel Branch'
+        required: true
+        default: 'KSUN'        
+      TREE:
+        description: 'Kernel Tree'
+        required: true
+        default: 'https://github.com/UdyneO2/kernel_realme_RMX2195'
+      AK3:
+        description: 'Anykernel Tree'
+        required: true
+        default: 'https://github.com/UdyneO2/Anykernel'
+      CLANG:
+        description: 'clang compiler'
+        required: true
+        default: 'https://github.com/techyminati/android_prebuilts_clang_host_linux-x86_clang-6443078'
+      AK3_BR:
+        description: 'AK3 Branch'
+        required: true
+        default: 'RMX2195'
+      NAME:
+        description: 'Specify your kernel NAME.'
+        required: true
+        default: 'RMX2195'
+      DEVICE:
+        description: 'Specify your Device Codename.'
+        required: true
+        default: 'RMX2195'
+      KSU:
+        description: 'KernelSU'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+        - true
+        - false
+      REL:
+        description: 'Release repo'
+        required: true
+        default: 'UdyneO2/kernel_realme_RMX2195'
+jobs:
+  Build-Kernel:
+    name: "🐎 Build kernel"
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 2
+      fail-fast: false
+    env:
+      KDIR: dir_${{ inputs.NAME}}
+      KNAME: ${{ inputs.NAME}}
+      kernelRepo: ${{ inputs.TREE }}
+      kernelBranch: ${{ inputs.BR }}
+      DEVICE: ${{ inputs.DEVICE }}
+      ANYKERNEL_NAME: Anykernel3
+      ANYKERNEL_SOURCE: ${{ inputs.AK3 }}
+      ANYKERNEL_SOURCE_BRANCH: ${{ inputs.AK3_BR }}
+      DEFCONFIG_NAME: vendor/${{ inputs.DEVICE }}_defconfig
+      withKSUN: ${{ inputs.KSU }}
+      ARCH: arm64
+      OUT_DIR: out
+      XCLANG: ${{ inputs.CLANG }}
+      ROOT: /home/runner/work
+    steps:
+      - name: "✨ Create working dir"
+        run: mkdir -p $KDIR
+
+      - name: "⭐ Install prerequisites"
+        run: |
+          sudo apt-get update
+          sudo apt update && sudo apt install bc  bison  build-essential  ccache   curl  flex  git libelf-dev libssl-dev lzop  python3  rsync unzip  zlib1g-dev gcc gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi make libncurses5-dev libncursesw5-dev wget
+      - name: "🌟 Clone kernel source => (${{ env.kernelRepo }})"
+        working-directory: ./${{ env.KDIR }}
+        run: |
+          git clone --recursive --branch $kernelBranch $kernelRepo $KNAME --depth=1
+          
+      - name: "😋 Update KernelSU-Next"
+        working-directory: ./${{ env.KDIR }}/${{ env.KNAME }}
+        if: ${{ env.withKSUN == 'true' }}
+        run: |
+          echo -e "Will Supported soon for any ksu"
+          cat ./arch/arm64/configs/${{ env.DEFCONFIG_NAME }} | grep KSU
+
+      - name: "🎶 Build kernel"
+        working-directory: ./${{ env.KDIR }}/${{ env.KNAME }}
+        run: |
+          export KBUILD_BUILD_USER="mnrdnn"
+          export KBUILD_BUILD_HOST="github"
+          git clone $XCLANG ~/toolchains/clang --depth=1 
+          export CLANG_PATH=~/toolchains/clang/bin
+          export PATH=${CLANG_PATH}:${PATH}
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          export CLANG_TRIPLE=aarch64-linux-gnu-
+          echo "PATH Variable: $PATH"
+          echo
+          echo "Set DEFCONFIG"
+          echo 
+          make CC=clang AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip O=out ${{ env.DEFCONFIG_NAME }}
+          echo
+          echo "Set DEFCONFIG"
+          echo 
+          make CC=clang AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip O=out -j$(nproc --all)
+          echo
+          echo "Build Succesfully"
+          
+          git clone --depth=1 $ANYKERNEL_SOURCE -b $ANYKERNEL_SOURCE_BRANCH $ANYKERNEL_NAME && rm -rf $ANYKERNEL_NAME/.git $ANYKERNEL_NAME/.github $ANYKERNEL_NAME/LICENSE $ANYKERNEL_NAME/README.md
+          if [[ -f $OUT_DIR/arch/$ARCH/boot/Image.gz ]]; then
+            cp $OUT_DIR/arch/$ARCH/boot/Image.gz $ANYKERNEL_NAME/Image.gz
+            echo -e "Image.gz found"
+          else
+            echo -e "Image.gz not found"
+            fi
+          if [[ -f $OUT_DIR/arch/$ARCH/boot/Image ]]; then
+            cp $OUT_DIR/arch/$ARCH/boot/Image $ANYKERNEL_NAME/Image
+          fi
+          cd $ANYKERNEL_NAME && zip -r9 ${{ env.ANYKERNEL_NAME }}-${{ env.DEVICE }}.zip *
+          mv $ANYKERNEL_NAME-$DEVICE.zip ../Release-${{ env.ANYKERNEL_NAME }}-${{ env.DEVICE }}.zip
+          echo ""
+          echo -e "Upload Release-${{ env.ANYKERNEL_NAME }}-${{ env.DEVICE }}.zip"
+          echo ""
+          
+      - uses: softprops/action-gh-release@v2
+        with:
+         token: ${{ secrets.GH_TOKEN }}
+         repository: ${{ inputs.REL }}
+         files: |
+          ../${{ env.ANYKERNEL_NAME }}-${{ env.DEVICE }}.zip
+         name: Update Kernel Build | ${{ env.ANYKERNEL_NAME }}-${{ env.DEVICE }} | ${{ env.ROOT }}/${{ env.KDIR }}/${{ env.KNAME }}/${{ env.ANYKERNEL_NAME }}
+         tag_name: ${{ inputs.BR }}
+         body: |
+          ### Release Notes:
+          * Kernel compiled using clang 11.0.1
+          * flash at your own risk.
+          * Thanks [github](https://github.com)
+          * Use [branch](https://github.com/UdyneO2/kernel_realme_RMX2195/tree/KSUN)
+          
+           ### Changelog ;
+          * - Add KernelSU-Next v1.0.8 Support
+          * - Add Susfs 1.5.8 support : Thanks to [sidex15](https://t.me/sidex15) - [Kernel Source](https://github.com/sidex15/kernel_realme_sm4250)
+          * - Enable uclamp
+          * - Add more gpucc-size
+          * - bugs? tell [me](https://t.me/mnrdnn)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Release-${{ env.ANYKERNEL_NAME }}-${{ env.DEVICE }}
+          path: ${{ env.ANYKERNEL_NAME }}/*
+
