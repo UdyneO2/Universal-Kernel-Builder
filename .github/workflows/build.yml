@@ -120,18 +120,17 @@ jobs:
             cp $OUT_DIR/arch/$ARCH/boot/Image $ANYKERNEL_NAME/Image
           fi
           cd $ANYKERNEL_NAME && zip -r9 ${{ env.ANYKERNEL_NAME }}-${{ env.DEVICE }}.zip *
-          mv $ANYKERNEL_NAME-$DEVICE.zip ../Release-${{ env.ANYKERNEL_NAME }}-${{ env.DEVICE }}.zip
+          mv ${{ env.ANYKERNEL_NAME }}-${{ env.DEVICE }}.zip ${{ env.ROOT }}/
           echo ""
-          echo -e "Upload Release-${{ env.ANYKERNEL_NAME }}-${{ env.DEVICE }}.zip"
-          echo ""
-          
+          echo -e "Upload ${{ env.ANYKERNEL_NAME }}-${{ env.DEVICE }}.zip"
+          echo ""          
       - uses: softprops/action-gh-release@v2
         with:
          token: ${{ secrets.GH_TOKEN }}
          repository: ${{ inputs.REL }}
          files: |
-          ../${{ env.ANYKERNEL_NAME }}-${{ env.DEVICE }}.zip
-         name: Update Kernel Build | ${{ env.ANYKERNEL_NAME }}-${{ env.DEVICE }} | ${{ env.ROOT }}/${{ env.KDIR }}/${{ env.KNAME }}/${{ env.ANYKERNEL_NAME }}
+            ${{ env.ROOT }}/${{ env.ANYKERNEL_NAME }}-${{ env.DEVICE }}.zip
+         name: Update Kernel Build | ${{ env.ANYKERNEL_NAME }}-${{ env.DEVICE }} 
          tag_name: ${{ inputs.BR }}
          body: |
           ### Release Notes:
@@ -146,8 +145,4 @@ jobs:
           * - Enable uclamp
           * - Add more gpucc-size
           * - bugs? tell [me](https://t.me/mnrdnn)
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Release-${{ env.ANYKERNEL_NAME }}-${{ env.DEVICE }}
-          path: ${{ env.ANYKERNEL_NAME }}/*
-
+      
